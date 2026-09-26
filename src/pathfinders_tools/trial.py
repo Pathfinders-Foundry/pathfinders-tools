@@ -81,12 +81,39 @@ def resolve(font, names):
     return resolved, missing
 
 
+def decompose_external_components(font, include):
+    """TTF: descompone los compuestos del set cuyos componentes quedan fuera
+    (i = dotlessi + dotaccentcomb). Si no, el subsetter conserva las piezas por
+    cierre de componentes y el Trial lleva glifos extra inaccesibles."""
+    if "glyf" not in font:
+        return
+    from fontTools.pens.recordingPen import DecomposingRecordingPen
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+
+    glyf = font["glyf"]
+    glyph_set = font.getGlyphSet()
+    keep = set(include)
+    for name in include:
+        g = glyf[name]
+        if not g.isComposite():
+            continue
+        if all(c.glyphName in keep for c in g.components):
+            continue
+        rec = DecomposingRecordingPen(glyph_set)
+        glyph_set[name].draw(rec)
+        pen = TTGlyphPen(None)
+        rec.replay(pen)
+        glyf[name] = pen.glyph()
+        glyf[name].recalcBounds(glyf)
+
+
 def subset_trial(path, keep):
     font = TTFont(path)
     include, missing = resolve(font, keep)
     if missing:
         raise ValueError(f"glifos del set no encontrados en el binario: {', '.join(missing)}")
     before = len(font.getGlyphOrder())
+    decompose_external_components(font, include)
 
     opt = subset.Options()
     # mismas opciones que fontmake (subset_otf_from_ufo) salvo layout_closure
