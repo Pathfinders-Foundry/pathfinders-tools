@@ -4,20 +4,24 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pathfinders-tools"
-version = "0.2.0"
+version = "0.3.0"
 description = "Pipeline tools for Pathfinders Foundry"
 requires-python = ">=3.11"
 dependencies = [
     "fonttools[woff]",
     "brotlicffi",
-    "ttfautohint-py",
+    "ttfautohint-py",  # lo usa fontmake -a (hinting dentro del build)
+    # pathfinders-check-render
+    "uharfbuzz",
+    "freetype-py",
+    "numpy",
 ]
 
 [project.scripts]
-pathfinders-fix-hints       = "pathfinders_tools.hints:main"
-pathfinders-fix-postprocess = "pathfinders_tools.postprocess:main"
 pathfinders-ttf-to-web      = "pathfinders_tools.web:main"
 pathfinders-fix-trial-subset = "pathfinders_tools.trial:main"
+pathfinders-check-render    = "pathfinders_tools.render:main"
+pathfinders-check-win-descent = "pathfinders_tools.windescent:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pathfinders_tools"]
