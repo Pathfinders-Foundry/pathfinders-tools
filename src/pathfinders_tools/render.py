@@ -55,7 +55,11 @@ se comparan contra ella la TTF, la WOFF y la WOFF2:
       uno hasta ~1 px con stems y overshoots), así que no pueden coincidir
       píxel a píxel. Medido en Tiphares correcta: máx. 1,82 px y 2,03 px. Esta
       pasada caza fallos groseros del hinting (instrucciones que deforman o
-      mueven glifos, avances hinted rotos). 16 ppem no se usa: en trazos de
+      mueven glifos, avances hinted rotos). Una TTF sin instrucciones (estilo
+      declarado `[ttf] unhinted`, ver hinting.py) se renderiza con
+      FT_LOAD_NO_AUTOHINT: así FreeType no la pasa por su autohinter y la
+      comparación es contra el contorno sin hinting. Que cada TTF lleve o no
+      instrucciones según el plan lo verifica pathfinders-check-hinting. 16 ppem no se usa: en trazos de
       1 px (guiones, macrones) el error relativo no es significativo.
    c) WOFF y WOFF2 contra la TTF, con y sin hinting: bitmaps y avances
       IDÉNTICOS (tolerancia 0). La compresión es sin pérdidas; cualquier
@@ -166,6 +170,10 @@ class Loaded:
         self.order = tt.getGlyphOrder()
         self.upem = tt["head"].unitsPerEm
         self.cmap = tt.getBestCmap() or {}
+        # TTF sin instrucciones (estilo declarado `unhinted`): FreeType caería al
+        # autohinter, que no es lo que ejecuta ningún navegador de escritorio con esa
+        # fuente. Se renderiza sin hinting (ver render_all).
+        self.no_instructions = "glyf" in tt and not any(t in tt for t in ("fpgm", "prep"))
         tt.close()
         self._ft = None
 
@@ -207,6 +215,8 @@ def render_all(font: Loaded, ppem: int, hinted: bool) -> dict[str, tuple]:
     face.set_pixel_sizes(0, ppem)
     flags = freetype.FT_LOAD_RENDER | freetype.FT_LOAD_NO_BITMAP
     flags |= freetype.FT_LOAD_TARGET_NORMAL if hinted else freetype.FT_LOAD_NO_HINTING
+    if hinted and font.no_instructions:
+        flags |= freetype.FT_LOAD_NO_AUTOHINT
     out = {}
     for gid, name in enumerate(font.order):
         face.load_glyph(gid, flags)
