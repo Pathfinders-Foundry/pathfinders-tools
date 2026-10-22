@@ -22,8 +22,8 @@ se comparan contra ella la TTF, la WOFF y la WOFF2:
        medio del borde)
      · avance renderizado
    a) Sin hinting, 128 ppem — OTF vs TTF/WOFF/WOFF2:
-        desplazamiento ≤ 2 u · error de contorno ≤ 1 u   (u a 1000 UPM,
-        se escalan con el UPM)
+        FAIL si error de contorno > 1,5 u, o si desplazamiento > 2 u Y error de
+        contorno > 0,9 u   (u a 1000 UPM, se escalan con el UPM)
       Justificación: fontmake convierte cúbicas a cuadráticas (cu2qu) con
       error máximo 0,001 em = 1 u a 1000 UPM, así que el desplazamiento medio
       del borde no puede pasar de 1 u. El centroide de glifos finos o pequeños
@@ -32,19 +32,34 @@ se comparan contra ella la TTF, la WOFF y la WOFF2:
       (parenright Light Italic) y 0,68 u. La release con el bug de LSB da
       3–108 u; el desplazamiento mínimo del bug (3 u) mide 2,8–3,0 u de
       centroide y 1,2–1,5 u de borde, y también se detecta.
-      Si un proyecto con pesos muy finos da falsos positivos (centroide > 2 u
-      con borde < 1 u), se sube la tolerancia en su project-spec.toml con la
-      excepción documentada en el CLAUDE.md:
+      Por qué dos condiciones: en trazos finos (5–15 u) el redondeo a enteros de
+      TTF y CFF (±0,5 u por coordenada, y hasta 1 u en componentes con offset)
+      es una fracción grande del trazo. La tinta total es pequeña, así que el
+      centroide se mueve hasta 12 u (1,5 px a 128 ppem) con un error de borde
+      < 0,7 u; y en barras horizontales el desplazamiento vertical de 1 u da un
+      error de borde de hasta 1,2 u. Medido en Seaspray (160 estilos, 62 400
+      glifos correctos): máx. borde 1,21 u; entre los glifos con desplazamiento
+      > 2 u, máx. borde 0,70 u. El bug de LSB de v1.000 (desplazamientos reales
+      ≥ 3 u) da borde ≥ 1,29 u: se detecta el 100 %. Lo que no se pide es que el
+      centroide solo, sin error de borde acompañante, haga fallar el build.
+      Bajar el error de cu2qu (-e) no cambia nada: el suelo es el redondeo a enteros.
+      Se puede ajustar por proyecto en su project-spec.toml (con la excepción
+      documentada en el CLAUDE.md):
         [render_crossformat]
-        shift_u = 2.5   # a 1000 UPM
-        edge_u = 1.0
+        shift_u = 2.0         # a 1000 UPM
+        edge_u = 1.5          # borde máximo incondicional
+        edge_with_shift_u = 0.9   # borde máximo si además shift_u se supera
    b) Con hinting, 24 y 72 ppem — OTF (hinter CFF) vs TTF (ttfautohint):
         desplazamiento ≤ 2,5 px · error de contorno ≤ 3 px · avance ± 1 px
       Dos hinters distintos alinean cada borde a la rejilla por su cuenta (cada
       uno hasta ~1 px con stems y overshoots), así que no pueden coincidir
       píxel a píxel. Medido en Tiphares correcta: máx. 1,82 px y 2,03 px. Esta
       pasada caza fallos groseros del hinting (instrucciones que deforman o
-      mueven glifos, avances hinted rotos). 16 ppem no se usa: en trazos de
+      mueven glifos, avances hinted rotos). Una TTF sin instrucciones (estilo
+      declarado `[ttf] unhinted`, ver hinting.py) se renderiza con
+      FT_LOAD_NO_AUTOHINT: así FreeType no la pasa por su autohinter y la
+      comparación es contra el contorno sin hinting. Que cada TTF lleve o no
+      instrucciones según el plan lo verifica pathfinders-check-hinting. 16 ppem no se usa: en trazos de
       1 px (guiones, macrones) el error relativo no es significativo.
    c) WOFF y WOFF2 contra la TTF, con y sin hinting: bitmaps y avances
       IDÉNTICOS (tolerancia 0). La compresión es sin pérdidas; cualquier
@@ -108,7 +123,8 @@ HINTED_PPEMS = (24, 72)
 
 # Tolerancias (ver docstring). Las de unidades están a 1000 UPM y se escalan.
 TOL_SHIFT_U = 2.0
-TOL_EDGE_U = 1.0
+TOL_EDGE_U = 1.5
+TOL_EDGE_WITH_SHIFT_U = 0.9
 TOL_ADV_UNHINTED_U = 0.5
 TOL_SHIFT_PX_HINTED = 2.5
 TOL_EDGE_PX_HINTED = 3.0
@@ -154,6 +170,10 @@ class Loaded:
         self.order = tt.getGlyphOrder()
         self.upem = tt["head"].unitsPerEm
         self.cmap = tt.getBestCmap() or {}
+        # TTF sin instrucciones (estilo declarado `unhinted`): FreeType caería al
+        # autohinter, que no es lo que ejecuta ningún navegador de escritorio con esa
+        # fuente. Se renderiza sin hinting (ver render_all).
+        self.no_instructions = "glyf" in tt and not any(t in tt for t in ("fpgm", "prep"))
         tt.close()
         self._ft = None
 
@@ -195,6 +215,8 @@ def render_all(font: Loaded, ppem: int, hinted: bool) -> dict[str, tuple]:
     face.set_pixel_sizes(0, ppem)
     flags = freetype.FT_LOAD_RENDER | freetype.FT_LOAD_NO_BITMAP
     flags |= freetype.FT_LOAD_TARGET_NORMAL if hinted else freetype.FT_LOAD_NO_HINTING
+    if hinted and font.no_instructions:
+        flags |= freetype.FT_LOAD_NO_AUTOHINT
     out = {}
     for gid, name in enumerate(font.order):
         face.load_glyph(gid, flags)
@@ -245,8 +267,12 @@ def compare_glyph(a: tuple, b: tuple) -> tuple[float, float, float, str | None]:
 
 
 def compare_renders(ref: dict, tgt: dict, names: list[str], scale: float,
-                    tol_shift: float, tol_edge: float, tol_adv: float) -> list[dict]:
-    """Glifos fuera de tolerancia. scale convierte px → unidad del informe."""
+                    tol_shift: float, tol_edge: float, tol_adv: float,
+                    tol_edge_with_shift: float | None = None) -> list[dict]:
+    """Glifos fuera de tolerancia. scale convierte px → unidad del informe.
+
+    Con tol_edge_with_shift, el desplazamiento del centroide solo cuenta si el error
+    de contorno supera también ese valor (ver docstring del módulo)."""
     bad = []
     for n in names:
         if n not in tgt:
@@ -254,7 +280,11 @@ def compare_renders(ref: dict, tgt: dict, names: list[str], scale: float,
             continue
         shift, edge, dadv, issue = compare_glyph(ref[n], tgt[n])
         shift, edge, dadv = shift * scale, edge * scale, dadv * scale
-        if issue or shift > tol_shift or edge > tol_edge or dadv > tol_adv:
+        if tol_edge_with_shift is None:
+            off = shift > tol_shift or edge > tol_edge
+        else:
+            off = edge > tol_edge or (shift > tol_shift and edge > tol_edge_with_shift)
+        if issue or off or dadv > tol_adv:
             bad.append({"glyph": n, "shift": round(shift, 2), "edge": round(edge, 2),
                         "dadv": round(dadv, 2), **({"issue": issue} if issue else {})})
     bad.sort(key=lambda d: (-("issue" in d), -max(d.get("shift", 0), d.get("edge", 0), d.get("dadv", 0))))
@@ -268,7 +298,7 @@ def compare_shaping(ref: list, tgt: list, strings: list[str]) -> list[dict]:
 # ── por estilo ────────────────────────────────────────────────────────────────
 
 def _check(label: str, ref: Loaded, tgt: Loaded, strings: list[str], ref_shapes: list,
-           exact: bool, cache: dict, tol_u: tuple[float, float]) -> list[dict]:
+           exact: bool, cache: dict, tol_u: tuple[float, float, float]) -> list[dict]:
     """Compara tgt contra ref en shaping + raster sin y con hinting."""
     results = []
     k = 1000.0 / ref.upem  # unidades de fuente → u a 1000 UPM (tolerancias)
@@ -286,11 +316,11 @@ def _check(label: str, ref: Loaded, tgt: Loaded, strings: list[str], ref_shapes:
 
     to_units = ref.upem / UNHINTED_PPEM
     if exact:
-        tol = (0.0, 0.0, 0.0)
+        tol, combo = (0.0, 0.0, 0.0), None
     else:
-        tol = (tol_u[0] / k, tol_u[1] / k, TOL_ADV_UNHINTED_U / k)
+        tol, combo = (tol_u[0] / k, tol_u[1] / k, TOL_ADV_UNHINTED_U / k), tol_u[2] / k
     bad = compare_renders(rend(ref, UNHINTED_PPEM, False), rend(tgt, UNHINTED_PPEM, False),
-                          names, to_units, *tol)
+                          names, to_units, *tol, tol_edge_with_shift=combo)
     results.append({"check": f"sin hinting @{UNHINTED_PPEM}ppem", "label": label,
                     "file": tgt.path.name, "n": len(bad), "items": bad[:20], "unit": "u"})
 
@@ -428,15 +458,17 @@ def main() -> None:
         prev_groups, prev_dupes = collect([args.previous])
         dupes += [f"(anterior) {d}" for d in prev_dupes]
 
-    tol_u = (TOL_SHIFT_U, TOL_EDGE_U)
+    tol_u = (TOL_SHIFT_U, TOL_EDGE_U, TOL_EDGE_WITH_SHIFT_U)
     spec = Path(args.spec) if args.spec else Path("qa/project-spec.toml")
     if spec.exists():
         with open(spec, "rb") as f:
             cfg = tomllib.load(f).get("render_crossformat", {})
-        tol_u = (float(cfg.get("shift_u", TOL_SHIFT_U)), float(cfg.get("edge_u", TOL_EDGE_U)))
-        if tol_u != (TOL_SHIFT_U, TOL_EDGE_U):
-            print(f"NOTA  tolerancia sin hinting del proyecto ({spec}): desplazamiento ≤ {tol_u[0]:g} u, "
-                  f"borde ≤ {tol_u[1]:g} u (por defecto {TOL_SHIFT_U:g} / {TOL_EDGE_U:g})")
+        tol_u = (float(cfg.get("shift_u", TOL_SHIFT_U)), float(cfg.get("edge_u", TOL_EDGE_U)),
+                 float(cfg.get("edge_with_shift_u", TOL_EDGE_WITH_SHIFT_U)))
+        if tol_u != (TOL_SHIFT_U, TOL_EDGE_U, TOL_EDGE_WITH_SHIFT_U):
+            print(f"NOTA  tolerancia sin hinting del proyecto ({spec}): borde ≤ {tol_u[1]:g} u, o desplazamiento "
+                  f"> {tol_u[0]:g} u y borde > {tol_u[2]:g} u (por defecto {TOL_EDGE_U:g} / {TOL_SHIFT_U:g} / "
+                  f"{TOL_EDGE_WITH_SHIFT_U:g})")
     elif args.spec:
         ap.error(f"no existe {spec}")
 
@@ -477,6 +509,7 @@ def main() -> None:
             json.dump({"freetype": ".".join(map(str, freetype.version())), "harfbuzz": hb.__version__,
                        "tolerances": {"unhinted_ppem": UNHINTED_PPEM, "hinted_ppems": HINTED_PPEMS,
                                       "shift_u_at_1000upm": tol_u[0], "edge_u_at_1000upm": tol_u[1],
+                                      "edge_with_shift_u_at_1000upm": tol_u[2],
                                       "adv_unhinted_u_at_1000upm": TOL_ADV_UNHINTED_U,
                                       "shift_px_hinted": TOL_SHIFT_PX_HINTED, "edge_px_hinted": TOL_EDGE_PX_HINTED,
                                       "adv_px_hinted": TOL_ADV_PX_HINTED},
