@@ -11,6 +11,7 @@ exponen estos comandos (siempre vía `uv run --with-requirements requirements.tx
 | `pathfinders-check-render` | Render cross-format: OTF de referencia frente a TTF/WOFF/WOFF2 |
 | `pathfinders-hint-plan` | Regex de instancias hinted/unhinted de un designspace o source (para `fontmake -i`) |
 | `pathfinders-check-hinting` | Detecta trazos que ttfautohint colapsa y verifica el plan de hinting |
+| `pathfinders-check-open-corners` | Comprueba que los open corners del source no llegan como triángulos a OTF/TTF/WOFF/WOFF2 |
 
 ## TTF sin hinting para estilos con hairlines (0.4.0)
 
@@ -67,9 +68,38 @@ raster (FreeType) con y sin hinting. Ver el docstring de `src/pathfinders_tools/
   `FT_LOAD_NO_AUTOHINT` para que FreeType no la pase por el autohinter.
 - WOFF y WOFF2 contra la TTF: idénticas.
 
+## pathfinders-check-open-corners
+
+Detecta el bug de `fontmake --filter X` sin `'...'`: el filtro `eraseOpenCorners` del source
+se sustituye y las esquinas abiertas salen como triangulitos. Por instancia interpola el
+designspace, localiza los open corners con el mismo criterio que
+`glyphsLib.filters.eraseOpenCorners`, calcula si el centro de cada triángulo debería tener
+tinta una vez borrada la esquina y lo compara con la tinta real del binario.
+
+```
+pathfinders-check-open-corners -d build/designspace/Familia-uprights-main.designspace \
+    -d build/designspace/Familia-italics-main.designspace build/otf [--json] [--html hoja.html]
+```
+
+- Entrada: uno o varios `-d` designspace y las fuentes (archivos o carpetas; OTF, TTF, WOFF, WOFF2).
+- Emparejamiento por `postScriptFontName`, nombre de archivo de la instancia o Familia-Estilo,
+  contra el nameID 6 y el nombre de archivo del binario. Lo que no empareja sale como
+  `UNCHECKED` con su motivo. Los Trial (recorte sin instancia propia) también, salvo con
+  `--trial-as-base`.
+- La interpolación se hace una vez por instancia y se reutiliza para todos los formatos;
+  `--jobs N` reparte instancias entre procesos.
+- Estados: `PASS`, `FAIL`, `UNCHECKED`, `NOT_EVALUABLE`. Exit 1 si hay `FAIL` (con `--strict`,
+  también si un archivo no Trial queda `UNCHECKED`).
+- Los triángulos de área < 2 u² no se pueden decidir con coordenadas enteras: se cuentan como
+  «no evaluables», se listan y nunca valen como PASS silencioso.
+- `--html`: todos los FAIL y una muestra de correctos por archivo (cut y peso).
+- **Limitación:** valida cada glifo con contorno propio, y los compuestos a través de su glifo
+  base. No examina open corners que solo aparecerían al transformar o combinar componentes.
+
 ## Versiones
 
-- **0.4.1** — canon Trial de 70 glifos (añade `softhyphen`, U+00AD).
+- **0.4.2** — `pathfinders-check-open-corners` (open corners del source vs. binarios; deps glyphsLib, ufo2ft, ufoLib2).
+- 0.4.1 — canon Trial de 70 glifos (añade `softhyphen`, U+00AD).
 - 0.4.0 — `pathfinders-hint-plan`, `pathfinders-check-hinting`; tolerancia sin hinting
   robusta en trazos finos; TTF sin instrucciones sin autohinter en check-render.
 - 0.3.0 — check de render cross-format; postproducción mínima.

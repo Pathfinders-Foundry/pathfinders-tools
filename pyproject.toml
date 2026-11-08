@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pathfinders-tools"
-version = "0.4.1"
+version = "0.4.2"
 description = "Pipeline tools for Pathfinders Foundry"
 requires-python = ">=3.11"
 dependencies = [
@@ -15,6 +15,10 @@ dependencies = [
     "uharfbuzz",
     "freetype-py",
     "numpy",
+    # pathfinders-check-open-corners
+    "glyphsLib",
+    "ufo2ft",
+    "ufoLib2",
 ]
 
 [project.scripts]
@@ -24,6 +28,7 @@ pathfinders-check-render    = "pathfinders_tools.render:main"
 pathfinders-check-win-descent = "pathfinders_tools.windescent:main"
 pathfinders-check-hinting   = "pathfinders_tools.hinting:main"
 pathfinders-hint-plan       = "pathfinders_tools.hinting:plan_main"
+pathfinders-check-open-corners = "pathfinders_tools.open_corners:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pathfinders_tools"]
