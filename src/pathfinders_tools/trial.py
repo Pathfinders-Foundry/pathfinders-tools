@@ -5,12 +5,12 @@ Por qué existe: fontmake aplica "Keep Glyphs" llamando al subsetter de fontTool
 con layout_features=["*"] y layout_closure activado (fontmake/font_project.py,
 subset_otf_from_ufo). El cierre GSUB vuelve a meter todo glifo alcanzable por
 sustitución desde los conservados (ligaduras, .fina, numr/dnom, sups/subs,
-ordinales...). Resultado: Trials con ~200 glifos en vez de 69. fontmake no
+ordinales...). Resultado: Trials con ~200 glifos en vez de 70. fontmake no
 permite desactivarlo, así que se re-subsetea el binario con layout_closure=False:
 se conservan las features (kern, liga fi/fl...) pero solo sobre los glifos del set.
 
 Glyph set:
-  - por defecto, el set canónico Pathfinders (69 glifos);
+  - por defecto, el set canónico Pathfinders (70 glifos);
   - si qa/project-spec.toml define [trial] keep_glyphs, se usa esa lista.
 Los nombres son de source (Glyphs); se resuelven a nombres de producción del binario.
 
@@ -33,7 +33,7 @@ CANONICAL_TRIAL_GLYPHS = (
     "a b c d e f g h i j k l m n o p q r s t u v w x y z "
     "fi fl "
     "zero one two three four five six seven eight nine "
-    "space nbspace period comma hyphen"
+    "space nbspace period comma hyphen softhyphen"
 ).split()
 
 # Nombres de Glyphs cuyo codepoint no deduce el AGL.

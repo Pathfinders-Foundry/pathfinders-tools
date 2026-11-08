@@ -42,8 +42,9 @@ license_url = "https://pathfinders.rocks/eula/"
 # ── TRIAL — glyph set canónico ─────────────────────────────────────────────────
 
 [trial]
-# 69 glyphs canónicos para instancias Trial de todos los proyectos Pathfinders.
-# A–Z, a–z, 0–9, fi (U+FB01), fl (U+FB02), space, nbspace, period, comma, hyphen.
+# 70 glyphs canónicos para instancias Trial de todos los proyectos Pathfinders.
+# A–Z, a–z, 0–9, fi (U+FB01), fl (U+FB02), space, nbspace, period, comma, hyphen, softhyphen.
+# Fuente canónica: Notion "Glifos Trial Pathfinders (canónico)" (2026-11-06; 70 con softhyphen).
 # Nota: Tiphares Trial v1 tiene 67 (le faltan fi/fl) — esta es la spec corregida.
 glyph_set_unicodes = [
   0x0020,        # space
@@ -65,6 +66,7 @@ glyph_set_unicodes = [
   0x0075, 0x0076, 0x0077, 0x0078, 0x0079,  # u–y
   0x007A,        # z
   0x00A0,        # nbspace (obligatorio — whitespace_glyphs falla si falta)
+  0x00AD,        # softhyphen
   0xFB01,        # fi ligature
   0xFB02,        # fl ligature
 ]
