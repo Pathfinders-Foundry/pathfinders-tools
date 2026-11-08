@@ -69,6 +69,7 @@ raster (FreeType) con y sin hinting. Ver el docstring de `src/pathfinders_tools/
 
 ## Versiones
 
-- **0.4.0** — `pathfinders-hint-plan`, `pathfinders-check-hinting`; tolerancia sin hinting
+- **0.4.1** — canon Trial de 70 glifos (añade `softhyphen`, U+00AD).
+- 0.4.0 — `pathfinders-hint-plan`, `pathfinders-check-hinting`; tolerancia sin hinting
   robusta en trazos finos; TTF sin instrucciones sin autohinter en check-render.
 - 0.3.0 — check de render cross-format; postproducción mínima.
